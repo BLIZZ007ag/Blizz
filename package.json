@@ -1,0 +1,9 @@
+{
+  "name": "blizz-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Blizz web app and authentication backend",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
