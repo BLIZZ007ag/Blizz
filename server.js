@@ -8,184 +8,85 @@ const ROOT = __dirname;
 const DATA = path.join(ROOT, 'data');
 const usersFile = path.join(DATA, 'users.json');
 const sessionsFile = path.join(DATA, 'sessions.json');
-
+const walletFile = path.join(DATA, 'wallets.json');
+const ledgerFile = path.join(DATA, 'ledger.json');
+const creatorFile = path.join(DATA, 'creator-earnings.json');
+const ticketsFile = path.join(DATA, 'support-tickets.json');
+const aiEventsFile = path.join(DATA, 'ai-events.jsonl');
 if (!fs.existsSync(DATA)) fs.mkdirSync(DATA, { recursive: true });
 
-function read(file, fallback) {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
-  catch { return fallback; }
-}
-function write(file, data) {
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-  fs.renameSync(tmp, file);
-}
-function headers() {
-  return {
-    'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
-  };
-}
-function json(res, status, obj) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...headers() });
-  res.end(JSON.stringify(obj));
-}
-function body(req) {
-  return new Promise((resolve, reject) => {
-    let d = '';
-    req.on('data', c => {
-      d += c;
-      if (d.length > 1e6) { req.destroy(); reject(new Error('Request too large')); }
-    });
-    req.on('end', () => {
-      try { resolve(d ? JSON.parse(d) : {}); }
-      catch { reject(new Error('Invalid JSON')); }
-    });
-    req.on('error', reject);
-  });
-}
-function hashPassword(password, salt) {
-  return crypto.scryptSync(password, salt, 64).toString('hex');
-}
-function publicUser(u) {
-  return {
-    id: u.id,
-    username: u.username,
-    displayName: u.displayName,
-    gender: u.gender,
-    bio: u.bio || '',
-    createdAt: u.createdAt
-  };
-}
-function auth(req) {
-  const h = req.headers.authorization || '';
-  if (!h.startsWith('Bearer ')) return null;
-  const token = h.slice(7);
-  const sessions = read(sessionsFile, {});
-  const s = sessions[token];
-  if (!s) return null;
-  const users = read(usersFile, []);
-  return users.find(u => u.id === s.userId) || null;
-}
-function validEmail(x) {
-  return typeof x === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x);
-}
-function safePath(urlPath) {
-  const pathname = decodeURIComponent(urlPath);
-  const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
-  const full = path.resolve(ROOT, relative);
-  return full.startsWith(ROOT + path.sep) || full === ROOT ? full : null;
-}
-const mime = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.svg': 'image/svg+xml'
-};
-function staticFile(req, res) {
-  const u = new URL(req.url, 'http://localhost');
-  const file = safePath(u.pathname);
-  if (!file) return json(res, 403, { error: 'Forbidden' });
-  fs.stat(file, (e, st) => {
-    if (e || !st.isFile()) return json(res, 404, { error: 'Not found' });
-    res.writeHead(200, {
-      'Content-Type': mime[path.extname(file).toLowerCase()] || 'application/octet-stream',
-      'Cache-Control': 'no-cache'
-    });
-    fs.createReadStream(file).pipe(res);
-  });
-}
+function read(file, fallback){ try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return fallback;} }
+function write(file,data){ const tmp=file+'.tmp'; fs.writeFileSync(tmp,JSON.stringify(data,null,2)); fs.renameSync(tmp,file); }
+function headers(){return {'Access-Control-Allow-Origin':process.env.ALLOWED_ORIGIN||'*','Access-Control-Allow-Headers':'Content-Type, Authorization, X-Founder-Key','Access-Control-Allow-Methods':'GET,POST,OPTIONS'};}
+function json(res,status,obj){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8',...headers()});res.end(JSON.stringify(obj));}
+function body(req){return new Promise((resolve,reject)=>{let d='';req.on('data',c=>{d+=c;if(d.length>2e6){req.destroy();reject(new Error('Request too large'));}});req.on('end',()=>{try{resolve(d?JSON.parse(d):{});}catch{reject(new Error('Invalid JSON'));}});req.on('error',reject);});}
+function hashPassword(password,salt){return crypto.scryptSync(password,salt,64).toString('hex');}
+function publicUser(u){return {id:u.id,username:u.username,displayName:u.displayName,gender:u.gender,bio:u.bio||'',createdAt:u.createdAt,role:u.role||'user'};}
+function auth(req){const h=req.headers.authorization||'';if(!h.startsWith('Bearer '))return null;const sessions=read(sessionsFile,{});const s=sessions[h.slice(7)];if(!s)return null;return read(usersFile,[]).find(u=>u.id===s.userId)||null;}
+function founder(req){const u=auth(req);if(!u)return null;const key=req.headers['x-founder-key'];if(process.env.FOUNDER_ADMIN_KEY && key===process.env.FOUNDER_ADMIN_KEY)return u;if(u.role==='founder')return u;return null;}
+function validEmail(x){return typeof x==='string'&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x);}
+function safePath(urlPath){const pathname=decodeURIComponent(urlPath);const relative=pathname==='/'?'index.html':pathname.replace(/^\/+/, '');const full=path.resolve(ROOT,relative);return full.startsWith(ROOT+path.sep)||full===ROOT?full:null;}
+const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml'};
+function staticFile(req,res){const u=new URL(req.url,'http://localhost');const file=safePath(u.pathname);if(!file)return json(res,403,{error:'Forbidden'});fs.stat(file,(e,st)=>{if(e||!st.isFile())return json(res,404,{error:'Not found'});res.writeHead(200,{'Content-Type':mime[path.extname(file).toLowerCase()]||'application/octet-stream','Cache-Control':'no-cache'});fs.createReadStream(file).pipe(res);});}
+function aiSanitize(x){return String(x||'').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,4000);}
+function aiDiagnose(message){const m=aiSanitize(message).toLowerCase();const rules=[
+[['session expired','session has expired','can\'t log in','cannot log in','login','log in'],'AUTH_SESSION','Login/session problem','It looks like a login or session problem. I can help clear a stale session safely and get you back to the login screen.'],
+[['profile','edit profile','bio','display name'],'PROFILE','Profile problem','It looks like a profile update problem. Check that your session is active, then try saving your profile again.'],
+[['settings','privacy','notification','accessibility'],'SETTINGS','Settings problem','It looks like a settings/navigation problem. I can record it for support and help you retry the action.'],
+[['upload','video','photo','post'],'MEDIA','Media/post problem','It looks like a media or posting problem. Check the file and connection; I can record the failure without exposing private data.'],
+[['game','trivia','matchup'],'GAMES','Games/matchup problem','It looks like a games or matchup problem. I can diagnose the flow and create a support ticket if needed.'],
+[['message','chat','inbox'],'MESSAGING','Messaging problem','It looks like a messaging problem. I can record the issue without exposing private message contents.'],
+[['coin','wallet','gift','payment','transfer','payout','earning'],'FINANCE','Wallet/payment problem','I can help inspect a Blizz wallet, gift, payment or creator-earnings issue. The financial ledger is server-authoritative and every operation is recorded.']
+];for(const [keys,code,title,answer] of rules)if(keys.some(k=>m.includes(k)))return {code,title,answer,safeFix:code==='AUTH_SESSION'};return {code:'GENERAL',title:'General Blizz support',answer:'Tell me what happened and what you expected Blizz to do. I can diagnose common problems or create a support ticket.',safeFix:false};}
+function aiEvent(event,details){try{fs.appendFileSync(aiEventsFile,JSON.stringify({time:new Date().toISOString(),event,details:details||{}})+'\n');}catch{}}
+function createTicket(message,diagnosis,userId){const tickets=read(ticketsFile,[]);const id='BLZ-'+Date.now().toString(36).toUpperCase();tickets.push({id,time:new Date().toISOString(),userId:userId||null,issue:aiSanitize(message),diagnosis:diagnosis.code,status:'open'});write(ticketsFile,tickets);aiEvent('support_ticket',{id,code:diagnosis.code,userId:userId||null});return id;}
+function getWallet(userId){const w=read(walletFile,{});if(!w[userId])w[userId]={coins:0,reserved:0};return w[userId];}
+function money(n){return Math.round(Number(n)*100)/100;}
+function addLedger(entry){const l=read(ledgerFile,[]);l.push({...entry,id:'TX-'+crypto.randomUUID(),time:new Date().toISOString()});write(ledgerFile,l);}
+function creditCoins(userId,amount,reason,ref){amount=Math.floor(Number(amount));if(!Number.isSafeInteger(amount)||amount<=0)throw Error('Invalid coin amount');const w=read(walletFile,{});w[userId]=w[userId]||{coins:0,reserved:0};w[userId].coins+=amount;write(walletFile,w);addLedger({type:'coin_credit',userId,amount,reason,ref:ref||null});return w[userId];}
+function debitCoins(userId,amount,reason,ref){amount=Math.floor(Number(amount));const w=read(walletFile,{});w[userId]=w[userId]||{coins:0,reserved:0};if(!Number.isSafeInteger(amount)||amount<=0)throw Error('Invalid coin amount');if(w[userId].coins<amount)throw Error('Insufficient Blizz Coins');w[userId].coins-=amount;write(walletFile,w);addLedger({type:'coin_debit',userId,amount,reason,ref:ref||null});return w[userId];}
+function creatorEarnings(userId){const all=read(creatorFile,{});return all[userId]||{periods:{},availableMinor:0,paidMinor:0};}
+function calculateCreatorPeriod(userId,period,eligibleViews,netAdRevenueMinor){const views=Math.max(0,Math.floor(Number(eligibleViews)||0));const revenue=Math.max(0,Math.floor(Number(netAdRevenueMinor)||0));const shareNum=60,shareDen=100;const creatorMinor=Math.floor(revenue*shareNum/shareDen);const all=read(creatorFile,{});const cur=all[userId]||{periods:{},availableMinor:0,paidMinor:0};if(cur.periods[period])return cur.periods[period];const row={period,eligibleViews:views,netAdRevenueMinor:revenue,creatorShareMinor:creatorMinor,status:'finalized',createdAt:new Date().toISOString()};cur.periods[period]=row;cur.availableMinor+=creatorMinor;all[userId]=cur;write(creatorFile,all);addLedger({type:'creator_earnings',userId,period,eligibleViews:views,netAdRevenueMinor:revenue,creatorShareMinor:creatorMinor});return row;}
+function openaiChat(messages,user){return new Promise((resolve,reject)=>{const key=process.env.OPENAI_API_KEY;if(!key)return reject(new Error('AI_NOT_CONFIGURED'));const model=process.env.OPENAI_MODEL||'gpt-5.6-luna';const input=messages.slice(-20).map(m=>({role:m.role==='assistant'?'assistant':'user',content:[{type:'input_text',text:aiSanitize(m.content)}]}));const payload=JSON.stringify({model,instructions:`You are Blizz AI, the official customer-care and product-support assistant for Blizz. Be natural, helpful, concise, warm and accurate. You may explain and diagnose Blizz features, accounts, safety, privacy, creator tools, games, wallet/coins, gifts, payments and creator earnings. Never invent a payment, balance, transaction, payout or security result. Financial truth comes only from Blizz server tools/ledger. Never request passwords, NIN, BVN, card numbers or private keys. You do not own Blizz and cannot change Founder authority. For actions, use only approved server operations. If you cannot verify something, say so and escalate.` ,input});const req=https.request({hostname:'api.openai.com',path:'/v1/responses',method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json','Content-Length':Buffer.byteLength(payload)}},r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>{try{const obj=JSON.parse(d);if(r.statusCode<200||r.statusCode>=300)return reject(new Error(obj.error?.message||'OpenAI request failed'));let text=obj.output_text;if(!text&&Array.isArray(obj.output))text=obj.output.flatMap(x=>x.content||[]).map(x=>x.text||'').filter(Boolean).join('\n');resolve(text||'I received the request but could not produce a response.');}catch(e){reject(e);}})});req.on('error',reject);req.write(payload);req.end();});}
 
-const server = http.createServer(async (req, res) => {
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204, headers());
-    return res.end();
-  }
-  try {
-    if (req.url === '/api/health' && req.method === 'GET') {
-      return json(res, 200, { ok: true, service: 'Blizz API' });
-    }
-    if (req.url === '/api/signup' && req.method === 'POST') {
-      const b = await body(req);
-      const username = String(b.username || '').trim().toLowerCase();
-      const displayName = String(b.displayName || '').trim();
-      const email = String(b.email || '').trim().toLowerCase();
-      const password = String(b.password || '');
-      const gender = String(b.gender || '').trim();
-      const dob = String(b.dob || '').trim();
-      if (username.length < 3 || username.length > 20 || !/^[a-z0-9_.]+$/.test(username)) return json(res, 400, { error: 'Username must be 3–20 characters using letters, numbers, _ or .' });
-      if (!displayName) return json(res, 400, { error: 'Display name is required' });
-      if (!validEmail(email)) return json(res, 400, { error: 'Enter a valid email' });
-      if (password.length < 8) return json(res, 400, { error: 'Password must be at least 8 characters' });
-      if (!gender) return json(res, 400, { error: 'Select a gender' });
-      if (!dob) return json(res, 400, { error: 'Date of birth is required' });
-      const users = read(usersFile, []);
-      if (users.some(u => u.username === username)) return json(res, 409, { error: 'Username already exists' });
-      if (users.some(u => u.email === email)) return json(res, 409, { error: 'Email already exists' });
-      const id = crypto.randomUUID();
-      const salt = crypto.randomBytes(16).toString('hex');
-      const u = { id, username, displayName, email, gender, dob, passwordSalt: salt, passwordHash: hashPassword(password, salt), bio: '', createdAt: new Date().toISOString() };
-      users.push(u);
-      write(usersFile, users);
-      const token = crypto.randomBytes(32).toString('hex');
-      const sessions = read(sessionsFile, {});
-      sessions[token] = { userId: id, createdAt: Date.now() };
-      write(sessionsFile, sessions);
-      return json(res, 201, { user: publicUser(u), token });
-    }
-    if (req.url === '/api/login' && req.method === 'POST') {
-      const b = await body(req);
-      const login = String(b.login || '').trim().toLowerCase();
-      const password = String(b.password || '');
-      const users = read(usersFile, []);
-      const u = users.find(x => x.username === login || x.email === login);
-      if (!u) return json(res, 401, { error: 'Invalid login details' });
-      const check = hashPassword(password, u.passwordSalt);
-      const a = Buffer.from(check, 'hex');
-      const c = Buffer.from(u.passwordHash, 'hex');
-      if (a.length !== c.length || !crypto.timingSafeEqual(a, c)) return json(res, 401, { error: 'Invalid login details' });
-      const token = crypto.randomBytes(32).toString('hex');
-      const sessions = read(sessionsFile, {});
-      sessions[token] = { userId: u.id, createdAt: Date.now() };
-      write(sessionsFile, sessions);
-      return json(res, 200, { user: publicUser(u), token });
-    }
-    if (req.url === '/api/me' && req.method === 'GET') {
-      const u = auth(req);
-      if (!u) return json(res, 401, { error: 'Not signed in' });
-      return json(res, 200, { user: publicUser(u) });
-    }
-    if (req.url === '/api/profile' && req.method === 'POST') {
-      const u = auth(req);
-      if (!u) return json(res, 401, { error: 'Not signed in' });
-      const b = await body(req);
-      const users = read(usersFile, []);
-      const i = users.findIndex(x => x.id === u.id);
-      if (i < 0) return json(res, 404, { error: 'User not found' });
-      if (b.displayName !== undefined) users[i].displayName = String(b.displayName).trim().slice(0, 60);
-      if (b.bio !== undefined) users[i].bio = String(b.bio).slice(0, 160);
-      write(usersFile, users);
-      return json(res, 200, { user: publicUser(users[i]) });
-    }
-    if (req.url === '/api/logout' && req.method === 'POST') {
-      const h = req.headers.authorization || '';
-      const token = h.startsWith('Bearer ') ? h.slice(7) : null;
-      const sessions = read(sessionsFile, {});
-      if (token) delete sessions[token];
-      write(sessionsFile, sessions);
-      return json(res, 200, { ok: true });
-    }
-    if (req.method === 'GET' && !req.url.startsWith('/api/')) return staticFile(req, res);
-    return json(res, 404, { error: 'Not found' });
-  } catch (e) {
-    console.error(e);
-    return json(res, 500, { error: 'Server error' });
-  }
-});
+const server=http.createServer(async(req,res)=>{if(req.method==='OPTIONS'){res.writeHead(204,headers());return res.end();}try{
+if(req.url==='/api/health'&&req.method==='GET')return json(res,200,{ok:true,service:'Blizz API',aiConfigured:!!process.env.OPENAI_API_KEY,ledger:'server-authoritative'});
+if(req.url==='/api/signup'&&req.method==='POST'){const b=await body(req);const username=String(b.username||'').trim().toLowerCase(),displayName=String(b.displayName||'').trim(),email=String(b.email||'').trim().toLowerCase(),password=String(b.password||''),gender=String(b.gender||'').trim(),dob=String(b.dob||'').trim();if(username.length<3||username.length>20||!/^[a-z0-9_.]+$/.test(username))return json(res,400,{error:'Username must be 3–20 characters using letters, numbers, _ or .'});if(!displayName)return json(res,400,{error:'Display name is required'});if(!validEmail(email))return json(res,400,{error:'Enter a valid email'});if(password.length<8)return json(res,400,{error:'Password must be at least 8 characters'});if(!gender)return json(res,400,{error:'Select a gender'});if(!dob)return json(res,400,{error:'Date of birth is required'});const users=read(usersFile,[]);if(users.some(u=>u.username===username))return json(res,409,{error:'Username already exists'});if(users.some(u=>u.email===email))return json(res,409,{error:'Email already exists'});const id=crypto.randomUUID(),salt=crypto.randomBytes(16).toString('hex');const u={id,username,displayName,email,gender,dob,passwordSalt:salt,passwordHash:hashPassword(password,salt),bio:'',role:'user',createdAt:new Date().toISOString()};users.push(u);write(usersFile,users);const token=crypto.randomBytes(32).toString('hex');const sessions=read(sessionsFile,{});sessions[token]={userId:id,createdAt:Date.now()};write(sessionsFile,sessions);return json(res,201,{user:publicUser(u),token});}
+if(req.url==='/api/login'&&req.method==='POST'){const b=await body(req);const login=String(b.login||'').trim().toLowerCase(),password=String(b.password||'');const users=read(usersFile,[]),u=users.find(x=>x.username===login||x.email===login);if(!u)return json(res,401,{error:'Invalid login details'});const check=hashPassword(password,u.passwordSalt),a=Buffer.from(check,'hex'),c=Buffer.from(u.passwordHash,'hex');if(a.length!==c.length||!crypto.timingSafeEqual(a,c))return json(res,401,{error:'Invalid login details'});const token=crypto.randomBytes(32).toString('hex'),sessions=read(sessionsFile,{});sessions[token]={userId:u.id,createdAt:Date.now()};write(sessionsFile,sessions);return json(res,200,{user:publicUser(u),token});}
+if(req.url==='/api/me'&&req.method==='GET'){const u=auth(req);if(!u)return json(res,401,{error:'Not signed in'});return json(res,200,{user:publicUser(u)});}
+if(req.url==='/api/profile'&&req.method==='POST'){const u=auth(req);if(!u)return json(res,401,{error:'Not signed in'});const b=await body(req),users=read(usersFile,[]),i=users.findIndex(x=>x.id===u.id);if(i<0)return json(res,404,{error:'User not found'});if(b.displayName!==undefined)users[i].displayName=String(b.displayName).trim().slice(0,60);if(b.bio!==undefined)users[i].bio=String(b.bio).slice(0,160);write(usersFile,users);return json(res,200,{user:publicUser(users[i])});}
+if(req.url==='/api/logout'&&req.method==='POST'){const h=req.headers.authorization||'',token=h.startsWith('Bearer ')?h.slice(7):null,sessions=read(sessionsFile,{});if(token)delete sessions[token];write(sessionsFile,sessions);return json(res,200,{ok:true});}
 
-server.listen(PORT, '0.0.0.0', () => console.log(`Blizz listening on port ${PORT}`));
+// Payment-provider webhook adapter. Normalize your gateway event into this shape and sign the raw JSON with PAYMENT_WEBHOOK_SECRET.
+if(req.url==='/api/payments/webhook'&&req.method==='POST'){
+  const raw=await body(req); const secret=process.env.PAYMENT_WEBHOOK_SECRET;
+  if(!secret)return json(res,503,{error:'Payment webhook secret is not configured'});
+  const supplied=String(req.headers['x-payment-signature']||'');
+  const expected=crypto.createHmac('sha256',secret).update(JSON.stringify(raw)).digest('hex');
+  if(!supplied||supplied.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)))return json(res,401,{error:'Invalid payment signature'});
+  if(raw.event!=='coin_purchase')return json(res,200,{ok:true,ignored:true});
+  const ref=String(raw.reference||''); const userId=String(raw.userId||''); const coins=Math.floor(Number(raw.coins));
+  if(!ref||!userId||!Number.isSafeInteger(coins)||coins<=0)return json(res,400,{error:'Invalid coin purchase payload'});
+  const existing=read(ledgerFile,[]).find(x=>x.type==='payment_coin_purchase'&&x.ref===ref);
+  if(existing)return json(res,200,{ok:true,duplicate:true,transactionId:existing.id});
+  const w=creditCoins(userId,coins,'payment_coin_purchase',ref); addLedger({type:'payment_coin_purchase',userId,coins,ref,provider:process.env.PAYMENT_PROVIDER||'external'});
+  return json(res,200,{ok:true,coins:w.coins,reference:ref});
+}
+// Wallet / coins / gifts. The server ledger is authoritative; the client cannot set balances.
+if(req.url==='/api/wallet'&&req.method==='GET'){const u=auth(req);if(!u)return json(res,401,{error:'Login required'});const w=getWallet(u.id);const ledger=read(ledgerFile,[]).filter(x=>x.userId===u.id).slice(-50).reverse();return json(res,200,{coins:w.coins,reserved:w.reserved,transactions:ledger});}
+if(req.url==='/api/coins/test-credit'&&req.method==='POST'){const u=auth(req);if(!u)return json(res,401,{error:'Login required'});if(process.env.NODE_ENV==='production'&&process.env.ENABLE_TEST_MONEY!=='true')return json(res,403,{error:'Test coin credit is disabled in production'});const b=await body(req),amount=Math.floor(Number(b.amount));if(!Number.isSafeInteger(amount)||amount<=0||amount>1000000)return json(res,400,{error:'Invalid test amount'});const w=creditCoins(u.id,amount,'test_credit','TEST-'+crypto.randomUUID());return json(res,200,{ok:true,coins:w.coins,warning:'Test-only credit. Connect a real payment provider before selling coins.'});}
+if(req.url==='/api/gifts/send'&&req.method==='POST'){const u=auth(req);if(!u)return json(res,401,{error:'Login required'});const b=await body(req),recipient=String(b.recipientUsername||'').trim().toLowerCase(),amount=Math.floor(Number(b.amount));if(!recipient||!Number.isSafeInteger(amount)||amount<=0)return json(res,400,{error:'Recipient and positive coin amount are required'});const users=read(usersFile,[]),to=users.find(x=>x.username===recipient);if(!to)return json(res,404,{error:'Recipient not found'});if(to.id===u.id)return json(res,400,{error:'You cannot gift yourself'});const ref='GIFT-'+crypto.randomUUID();try{const from=debitCoins(u.id,amount,'gift_sent',ref);const toWallet=creditCoins(to.id,amount,'gift_received',ref);return json(res,200,{ok:true,transactionId:ref,fromCoins:from.coins,recipient:to.username,recipientCoins:toWallet.coins});}catch(e){return json(res,400,{error:e.message});}}
+if(req.url==='/api/creator/earnings'&&req.method==='GET'){const u=auth(req);if(!u)return json(res,401,{error:'Login required'});return json(res,200,creatorEarnings(u.id));}
+if(req.url==='/api/creator/calculate'&&req.method==='POST'){const u=founder(req);if(!u)return json(res,403,{error:'Founder authorization required'});const b=await body(req),target=String(b.userId||''),period=String(b.period||'').trim(),views=Math.floor(Number(b.eligibleViews)||0),netRevenue=Math.floor(Number(b.netAdRevenueMinor)||0);if(!target||!period||views<0||netRevenue<0)return json(res,400,{error:'userId, period, eligibleViews and netAdRevenueMinor are required'});const row=calculateCreatorPeriod(target,period,views,netRevenue);return json(res,200,{ok:true,rule:'60% creator / 40% Blizz',period:row});}
+if(req.url==='/api/creator/payout'&&req.method==='POST'){const u=founder(req);if(!u)return json(res,403,{error:'Founder authorization required'});const b=await body(req),target=String(b.userId||''),amount=Math.floor(Number(b.amountMinor));if(!target||!Number.isSafeInteger(amount)||amount<=0)return json(res,400,{error:'Valid userId and amountMinor required'});const all=read(creatorFile,{}),e=all[target]||{periods:{},availableMinor:0,paidMinor:0};if(e.availableMinor<amount)return json(res,400,{error:'Insufficient available creator earnings'});e.availableMinor-=amount;e.paidMinor+=amount;e.lastPayout={amountMinor:amount,status:'approved_for_payment',time:new Date().toISOString()};all[target]=e;write(creatorFile,all);addLedger({type:'creator_payout_approved',userId:target,amountMinor:amount,approvedBy:u.id});return json(res,200,{ok:true,amountMinor:amount,status:'approved_for_payment'});}
+
+// Real GPT-style AI brain. API key stays on the server/Render environment.
+if(req.url==='/api/ai/chat'&&req.method==='POST'){const u=auth(req);if(!u)return json(res,401,{error:'Login required'});const b=await body(req);let messages=Array.isArray(b.messages)?b.messages.slice(-20):[{role:'user',content:String(b.message||'')}];const lower=messages.at(-1)?.content?.toLowerCase?.()||'';if(lower.includes('balance')||lower.includes('coin')||lower.includes('wallet')){const w=getWallet(u.id);messages=[{role:'system',content:`Verified Blizz wallet snapshot: ${w.coins} coins available, ${w.reserved} reserved. Treat these numbers as authoritative for this response only; do not invent balances.`},...messages];}if(lower.includes('earning')||lower.includes('payout')||lower.includes('creator')){const e=creatorEarnings(u.id);messages=[{role:'system',content:`Verified creator earnings snapshot: availableMinor=${e.availableMinor||0}, paidMinor=${e.paidMinor||0}. Explain only what is present; do not invent payout status.`},...messages];}try{const answer=await openaiChat(messages,u);aiEvent('gpt_chat',{userId:u.id});return json(res,200,{ok:true,answer,model:process.env.OPENAI_MODEL||'gpt-5.6-luna'});}catch(e){if(e.message==='AI_NOT_CONFIGURED')return json(res,503,{ok:false,error:'AI is not configured yet. Add OPENAI_API_KEY to Render environment variables.',fallback:aiDiagnose(messages.at(-1)?.content||'')});return json(res,502,{ok:false,error:'AI service temporarily unavailable',fallback:aiDiagnose(messages.at(-1)?.content||'')});}}
+if(req.url==='/api/ai/health'&&req.method==='GET')return json(res,200,{ok:true,status:'operational',mode:process.env.OPENAI_API_KEY?'gpt-live-with-safe-tools':'safe-diagnostics',safeAutoFix:['AUTH_SESSION'],financialTools:['wallet_read','gift_transfer','creator_calculation','payout_approval'],financialAuthority:'server_ledger'});
+if(req.url==='/api/ai/support'&&req.method==='POST'){const b=await body(req),diagnosis=aiDiagnose(b.message||'');aiEvent('support_diagnosis',{code:diagnosis.code});return json(res,200,{ok:true,diagnosis});}
+if(req.url==='/api/ai/ticket'&&req.method==='POST'){const u=auth(req),b=await body(req),diagnosis=aiDiagnose(b.message||''),ticketId=createTicket(b.message||'',diagnosis,u?.id);return json(res,200,{ok:true,ticketId,status:'open'});}
+if(req.url==='/api/ai/autofix'&&req.method==='POST'){const u=auth(req);if(!u)return json(res,401,{error:'Login required'});const b=await body(req),diagnosis=aiDiagnose(b.message||b.code||'');if(diagnosis.code!=='AUTH_SESSION')return json(res,200,{ok:false,action:'MANUAL_REVIEW',message:'No automatic repair is enabled for this problem yet. I recorded the issue for support.'});const token=(req.headers.authorization||'').slice(7),sessions=read(sessionsFile,{});delete sessions[token];write(sessionsFile,sessions);aiEvent('safe_autofix',{code:diagnosis.code,userId:u.id,action:'clear_session'});return json(res,200,{ok:true,action:'SESSION_CLEARED',message:'Your old session was safely cleared. Please log in again.'});}
+
+if(req.method==='GET'&&!req.url.startsWith('/api/'))return staticFile(req,res);return json(res,404,{error:'Not found'});
+}catch(e){console.error(e);return json(res,500,{error:'Server error'});}});
+server.listen(PORT,'0.0.0.0',()=>console.log(`Blizz listening on port ${PORT}`));
