@@ -1,43 +1,25 @@
-# Blizz — PostgreSQL Foundation Upgrade
+# Blizz — real PostgreSQL web foundation
 
-This version moves Blizz's persistent account and platform data from Render's temporary local JSON storage to PostgreSQL.
+This package is a real deployable Blizz foundation, not a phone-test overlay.
 
-## Data moved to PostgreSQL
-- Accounts and profiles
-- Login sessions
-- Password reset/OTP records
-- Blizz Coin wallets
-- Coin/gift/payment ledger
-- Creator earnings and finalized periods
-- Support tickets
-- AI support event logs
+## Included
+- PostgreSQL-backed accounts and persistent sessions
+- Login/logout/profile editing
+- Profile pictures stored in PostgreSQL
+- Real photo/video post upload and feed
+- Following, likes and comments
+- Search for users/posts
+- Real account-to-account text messaging with polling
+- Notifications for follows, likes, comments, messages and matches
+- Gender-aware matching with persistent like/pass actions and mutual matches
+- Game invite storage/API and working Games navigation
+- Real camera + microphone permission flow, front/rear switching and gallery posting
+- Feed tabs: Following / Friends / For You with horizontal swipe
+- White-screen-safe startup/error UI
 
-The database schema is created automatically when the server starts. If legacy JSON user data is present during deployment, the server imports users once when the PostgreSQL users table is empty.
+## Render
+Keep the existing `DATABASE_URL`. Do not commit secrets. Set `NODE_ENV=production` for production.
 
-## Render setup
-1. Create the Blizz PostgreSQL database in the same region as the Blizz web service.
-2. On the database page, use **Connect** to obtain the database connection information.
-3. In the existing Blizz Web Service: **Environment → Add Environment Variable**.
-4. Add `DATABASE_URL` using Render's **internal database URL**. Do not paste the database password into GitHub or into the code.
-5. Keep `DATABASE_SSL=true` unless Render specifically instructs otherwise.
-6. Deploy the repository update.
+Start command: `node server.js`
 
-## AI
-Set `OPENAI_API_KEY` and `OPENAI_MODEL` in Render. The key stays server-side.
-
-## Password recovery
-The API supports email or SMS OTP recovery. Configure Resend for email and/or Termii for SMS. Until a provider is configured, password recovery cannot send a real code in production.
-
-## Important testing note
-Render's Free PostgreSQL is intended for testing and has an expiry date. Upgrade before public production launch so Blizz accounts and financial records remain permanently available.
-
-## Security
-- Never commit API keys, database URLs, passwords, payment secrets, or user data.
-- Financial balances are server/database authoritative.
-- Gift transfers and payment credits use database transactions to prevent partial updates.
-- Payment references have a unique index to prevent duplicate coin credits.
-- AI cannot change Founder authority and is not the source of financial truth.
-
-
-## Blizz Creator & Media update
-This version adds PostgreSQL-backed posts/media, a full-screen creator page, video/image upload (60 MB max), sound upload and original Blizz sound files, post captions/hashtags/mentions/visibility, real feed tabs (For You/Following/Friends), follow/unfollow storage, and profile video loading. Commercial music catalogs still require appropriate licensing/provider integration. Advanced video operations such as true transcoding/cutting are preview controls until a media-processing worker is connected.
+The database tables are created/migrated automatically on startup.

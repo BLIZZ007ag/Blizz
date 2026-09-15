@@ -1,6 +1,6 @@
 {
   "name": "blizz-platform",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Blizz web app with persistent PostgreSQL backend, AI support, wallet and creator rewards",
   "main": "server.js",
@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "pg": "^8.16.3",
-    "busboy": "^1.6.0",
-    "ffmpeg-static": "^5.2.0"
+    "busboy": "^1.6.0"
   }
 }
