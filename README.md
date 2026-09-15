@@ -1,57 +1,39 @@
-# Blizz — GPT AI + Wallet + Creator Rewards Upgrade
+# Blizz — PostgreSQL Foundation Upgrade
 
-This build upgrades the Blizz test project with a real server-side GPT-style support brain, a server-authoritative Blizz Coin ledger, gift transfers, creator earnings calculations, payment webhook reconciliation, and a more lively wallet/creator UI.
+This version moves Blizz's persistent account and platform data from Render's temporary local JSON storage to PostgreSQL.
 
-## Important security model
-- The AI does **not** own Blizz and cannot change Founder authority.
-- The financial ledger is authoritative; the AI cannot invent or directly edit balances.
-- Money/coin mutations happen through server endpoints with validation and transaction IDs.
-- Founder-sensitive operations require Founder authorization.
-- Never put API keys in the frontend or GitHub.
-- The JSON data store is for testing/development. Before a public launch, migrate users, sessions, wallet and ledger data to PostgreSQL/managed storage with backups, encryption, monitoring and strict access control.
+## Data moved to PostgreSQL
+- Accounts and profiles
+- Login sessions
+- Password reset/OTP records
+- Blizz Coin wallets
+- Coin/gift/payment ledger
+- Creator earnings and finalized periods
+- Support tickets
+- AI support event logs
 
-## GPT AI setup on Render
-In Render → your Blizz service → Environment, add:
-- `OPENAI_API_KEY` = your secret OpenAI API key
-- `OPENAI_MODEL` = `gpt-5.6-luna` (or another model available to your API account)
+The database schema is created automatically when the server starts. If legacy JSON user data is present during deployment, the server imports users once when the PostgreSQL users table is empty.
 
-The key is read only by `server.js`. It is never sent to the browser.
+## Render setup
+1. Create the Blizz PostgreSQL database in the same region as the Blizz web service.
+2. On the database page, use **Connect** to obtain the database connection information.
+3. In the existing Blizz Web Service: **Environment → Add Environment Variable**.
+4. Add `DATABASE_URL` using Render's **internal database URL**. Do not paste the database password into GitHub or into the code.
+5. Keep `DATABASE_SSL=true` unless Render specifically instructs otherwise.
+6. Deploy the repository update.
 
-## Founder controls
-Set:
-- `FOUNDER_ADMIN_KEY` = a long random secret
+## AI
+Set `OPENAI_API_KEY` and `OPENAI_MODEL` in Render. The key stays server-side.
 
-Founder-authorized requests can use `X-Founder-Key` server-side. For production, replace the simple bootstrap mechanism with a proper database-backed role/permission system, MFA/passkeys, least privilege and audit logs.
+## Password recovery
+The API supports email or SMS OTP recovery. Configure Resend for email and/or Termii for SMS. Until a provider is configured, password recovery cannot send a real code in production.
 
-## Coins and payments
-The server provides:
-- `/api/wallet` — verified balance + ledger history
-- `/api/gifts/send` — atomic sender debit + recipient credit
-- `/api/payments/webhook` — signed payment-provider adapter endpoint
-- `/api/coins/test-credit` — development-only test credits
+## Important testing note
+Render's Free PostgreSQL is intended for testing and has an expiry date. Upgrade before public production launch so Blizz accounts and financial records remain permanently available.
 
-The payment webhook expects a normalized JSON event:
-`{ "event":"coin_purchase", "reference":"provider-reference", "userId":"user-id", "coins":5000 }`
-
-Sign the exact JSON body with HMAC-SHA256 using `PAYMENT_WEBHOOK_SECRET` and send it as `X-Payment-Signature`. Duplicate references are ignored, preventing double-crediting.
-
-A real gateway (such as a provider available in your launch country) must be connected and its official webhook format mapped to this normalized event before selling coins for real money.
-
-## Creator rewards
-The server supports the Blizz rule:
-- Creator: 60%
-- Blizz: 40%
-
-`/api/creator/calculate` is Founder-authorized and finalizes a period using verified eligible views and net ad revenue. It records the period so it cannot be finalized twice.
-
-`/api/creator/payout` approves a payout amount from finalized available creator earnings. A real payout provider still needs to be connected for the actual bank/mobile-money transfer.
-
-## Run locally
-Node 18+:
-```bash
-npm start
-```
-Then open `http://localhost:8080` (or the configured PORT).
-
-## GitHub / Render
-Upload the project files to the root of your existing `blizz` repository, commit to `main`, and let Render redeploy. Then set the environment variables above in Render.
+## Security
+- Never commit API keys, database URLs, passwords, payment secrets, or user data.
+- Financial balances are server/database authoritative.
+- Gift transfers and payment credits use database transactions to prevent partial updates.
+- Payment references have a unique index to prevent duplicate coin credits.
+- AI cannot change Founder authority and is not the source of financial truth.

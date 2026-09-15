@@ -3,3 +3,9 @@ node_modules/
 *.log
 data/users.json
 data/sessions.json
+data/wallets.json
+data/ledger.json
+data/creator-earnings.json
+data/support-tickets.json
+data/ai-events.jsonl
+data/password-resets.json
