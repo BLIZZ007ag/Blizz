@@ -1,0 +1,39 @@
+{
+  "project": "Blizz",
+  "goal": "TikTok-style feature parity without copying TikTok proprietary source code",
+  "implemented": [
+    "vertical short-video feed",
+    "for-you/following/friends",
+    "double-tap-like",
+    "creator profiles",
+    "follow/unfollow",
+    "camera capture",
+    "gallery upload",
+    "video editor",
+    "sound UI",
+    "text/stickers/effects/filters/speed/trim/split/volume",
+    "ffmpeg server-side processing",
+    "posting",
+    "postgresql social/account foundation"
+  ],
+  "target_2026": [
+    "voice comments",
+    "poll comments",
+    "photo/carousel comments",
+    "shared collections",
+    "shared feed",
+    "local/nearby feed",
+    "stories",
+    "reposts",
+    "playlists",
+    "watch history",
+    "advanced search",
+    "live co-hosting",
+    "live gifts",
+    "shop",
+    "creator analytics",
+    "ai creation",
+    "translation/dubbing",
+    "safety and recommendation controls"
+  ]
+}

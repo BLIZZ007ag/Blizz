@@ -244,6 +244,16 @@ async function main(){
         const r=await q(`SELECT p.id,p.user_id,u.username,u.display_name,p.media_type,p.caption,p.hashtags,p.mentions,p.visibility,p.sound_name,p.sound IS NOT NULL AS has_sound,p.edit_config,p.created_at FROM posts p JOIN users u ON u.id=p.user_id WHERE ${where} ORDER BY p.created_at DESC LIMIT 50`,params);
         return json(res,200,{ok:true,posts:r.rows.map(x=>({id:x.id,userId:x.user_id,username:x.username,displayName:x.display_name,mediaType:x.media_type,caption:x.caption,hashtags:x.hashtags,mentions:x.mentions,visibility:x.visibility,editConfig:x.edit_config||{},soundName:x.sound_name||'',hasSound:x.has_sound,mediaUrl:'/api/media/'+x.id,soundUrl:x.has_sound?'/api/media/'+x.id+'/sound':null,createdAt:x.created_at}))});
       }
+      if(req.url.startsWith('/api/users/')&&req.method==='GET'){
+        const username=decodeURIComponent(req.url.slice('/api/users/'.length)).trim().toLowerCase();
+        const r=await q('SELECT id,username,display_name,bio,created_at FROM users WHERE username=$1',[username]);
+        if(!r.rows[0])return json(res,404,{error:'User not found'});
+        const u=r.rows[0];
+        const posts=await q(`SELECT p.id,p.user_id,u.username,u.display_name,p.media_type,p.caption,p.sound_name,p.edit_config,p.created_at FROM posts p JOIN users u ON u.id=p.user_id WHERE p.user_id=$1 ORDER BY p.created_at DESC LIMIT 100`,[u.id]);
+        const followers=await q('SELECT COUNT(*)::int AS n FROM follows WHERE following_id=$1',[u.id]);
+        const following=await q('SELECT COUNT(*)::int AS n FROM follows WHERE follower_id=$1',[u.id]);
+        return json(res,200,{ok:true,user:{id:u.id,username:u.username,displayName:u.display_name,bio:u.bio||'',followers:followers.rows[0].n,following:following.rows[0].n},posts:posts.rows.map(x=>({id:x.id,userId:x.user_id,username:x.username,displayName:x.display_name,mediaType:x.media_type,caption:x.caption,soundName:x.sound_name||'',editConfig:x.edit_config||{},mediaUrl:'/api/media/'+x.id,createdAt:x.created_at}))});
+      }
       if(req.url.startsWith('/api/follow/')&&req.method==='POST'){
         const u=await auth(req);if(!u)return json(res,401,{error:'Login required'});const target=decodeURIComponent(req.url.slice('/api/follow/'.length));const r=await q('SELECT id FROM users WHERE username=$1',[target]);if(!r.rows[0])return json(res,404,{error:'User not found'});if(r.rows[0].id===u.id)return json(res,400,{error:'You cannot follow yourself'});await q('INSERT INTO follows(follower_id,following_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[u.id,r.rows[0].id]);return json(res,200,{ok:true,following:true});
       }
