@@ -37,3 +37,7 @@ Render's Free PostgreSQL is intended for testing and has an expiry date. Upgrade
 - Gift transfers and payment credits use database transactions to prevent partial updates.
 - Payment references have a unique index to prevent duplicate coin credits.
 - AI cannot change Founder authority and is not the source of financial truth.
+
+
+## Blizz Creator & Media update
+This version adds PostgreSQL-backed posts/media, a full-screen creator page, video/image upload (60 MB max), sound upload and original Blizz sound files, post captions/hashtags/mentions/visibility, real feed tabs (For You/Following/Friends), follow/unfollow storage, and profile video loading. Commercial music catalogs still require appropriate licensing/provider integration. Advanced video operations such as true transcoding/cutting are preview controls until a media-processing worker is connected.
