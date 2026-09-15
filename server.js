@@ -176,6 +176,11 @@ async function main(){
   const server=http.createServer(async(req,res)=>{
     if(req.method==='OPTIONS'){res.writeHead(204,headers());return res.end();}
     try{
+      if(req.url==='/api/features'&&req.method==='GET'){
+        const featureFile=path.join(__dirname,'BLIZZ_COMPLETE_FEATURES_2026.json');
+        try{const registry=JSON.parse(await fs.promises.readFile(featureFile,'utf8'));return json(res,200,{ok:true,registry});}
+        catch(e){return json(res,500,{ok:false,error:'FEATURE_REGISTRY_UNAVAILABLE'});}
+      }
       if(req.url==='/api/health'&&req.method==='GET'){
         await q('SELECT 1');
         return json(res,200,{ok:true,service:'Blizz API',database:'postgresql',aiConfigured:!!process.env.OPENAI_API_KEY,ledger:'server-authoritative'});
