@@ -5,6 +5,8 @@ const crypto = require('crypto');
 const https = require('https');
 const { Pool } = require('pg');
 const Busboy = require('busboy');
+const ffmpegPath = require('ffmpeg-static');
+const { spawn } = require('child_process');
 
 const PORT = Number(process.env.PORT || 10000);
 const ROOT = __dirname;
@@ -127,6 +129,47 @@ function maskPhone(phone){const p=normalizePhone(phone);return p.length>4?'+'+p.
 
 function openaiChat(messages){return new Promise((resolve,reject)=>{const key=process.env.OPENAI_API_KEY;if(!key)return reject(Error('AI_NOT_CONFIGURED'));const model=process.env.OPENAI_MODEL||'gpt-5.6-luna';const input=messages.slice(-20).map(m=>({role:m.role==='assistant'?'assistant':'user',content:[{type:'input_text',text:aiSanitize(m.content)}]}));const payload=JSON.stringify({model,instructions:`You are Blizz AI, the official Blizz customer-care and product-support assistant. Be natural, helpful, concise, warm and accurate. Handle accounts, login, password recovery, safety, privacy, creator tools, games, wallet/coins, gifts, payments and creator earnings. Never invent balances, transactions, payouts, security results or account status. Financial truth comes only from Blizz server data. Never ask for passwords, NIN, BVN, card numbers or private keys. You do not own Blizz and cannot change Founder authority. Use only approved support actions. If you cannot verify something, say so and escalate.` ,input});const req=https.request({hostname:'api.openai.com',path:'/v1/responses',method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json','Content-Length':Buffer.byteLength(payload)}},r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>{try{const o=JSON.parse(d);if(r.statusCode<200||r.statusCode>=300)return reject(Error(o.error?.message||'OpenAI request failed'));let text=o.output_text;if(!text&&Array.isArray(o.output))text=o.output.flatMap(x=>x.content||[]).map(x=>x.text||'').filter(Boolean).join('\n');resolve(text||'I received the request but could not produce a response.');}catch(e){reject(e);}})});req.on('error',reject);req.write(payload);req.end();});}
 
+
+function runFFmpeg(args){return new Promise((resolve,reject)=>{const cp=spawn(ffmpegPath,args,{stdio:['ignore','ignore','pipe']});let err='';cp.stderr.on('data',d=>err+=d.toString());cp.on('error',reject);cp.on('close',code=>code===0?resolve():reject(Error(err.slice(-5000)||'Media processing failed')));});}
+async function processUploadedVideo(media,soundBuffer,edit){
+  if(!media || !/^video\//.test(media.mime)) return media;
+  const tmp=await fs.promises.mkdtemp(path.join(os.tmpdir(),'blizz-media-'));
+  const input=path.join(tmp,'input.bin'), output=path.join(tmp,'output.mp4');
+  await fs.promises.writeFile(input,media.buffer);
+  if(soundBuffer) await fs.promises.writeFile(path.join(tmp,'sound.bin'),soundBuffer);
+  try{
+    const e=edit||{};
+    const duration=await new Promise((resolve,reject)=>{const cp=spawn(ffmpegPath,['-i',input],{stdio:['ignore','ignore','pipe']});let text='';cp.stderr.on('data',d=>text+=d.toString());cp.on('error',reject);cp.on('close',()=>{const m=text.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);resolve(m?(+m[1]*3600+ +m[2]*60+ +m[3]):0);});});
+    if(!duration) throw Error('Could not read video duration.');
+    const startPct=Math.max(0,Math.min(99,Number(e.start??0))), endPct=Math.max(startPct+1,Math.min(100,Number(e.end??100)));
+    const start=duration*startPct/100, clipDuration=Math.max(.05,duration*(endPct-startPct)/100);
+    const speed=Math.max(.25,Math.min(4,Number(e.speed||1)));
+    const origVol=Math.max(0,Math.min(1,Number(e.originalVolume??1))), musicVol=Math.max(0,Math.min(1,Number(e.musicVolume??.8)));
+    const vf=[];
+    const styles={Vivid:'eq=saturation=1.35:contrast=1.08',Warm:'colorbalance=rs=.08:gs=.03:bs=-.04',Cool:'colorbalance=rs=-.04:gs=.02:bs=.08',Fade:'eq=brightness=.04:contrast=.92','B&W':'hue=s=0',Glow:'eq=brightness=.08:saturation=1.15:gamma=1.04',Dream:'gblur=sigma=0.45'};
+    const style=styles[String(e.filter||'')]||styles[String(Array.isArray(e.effects)?e.effects[0]:'')]; if(style)vf.push(style);
+    if(e.overlayText) vf.push(`drawtext=text='${String(e.overlayText).replace(/([\\':])/g,'\\$1').replace(/%/g,'\\%').replace(/\n/g,' ')}':fontcolor=white:fontsize=42:borderw=3:bordercolor=black@0.65:x=(w-text_w)/2:y=h*0.78`);
+    if(speed!==1) vf.push(`setpts=${(1/speed).toFixed(5)}*PTS`);
+    const args=['-y','-ss',String(start),'-t',String(clipDuration),'-i',input];
+    if(soundBuffer){
+      args.push('-i',path.join(tmp,'sound.bin'));
+      const vchain=vf.length?vf.join(','):'null';
+      const atempo=[]; let remain=speed; while(remain>2){atempo.push('atempo=2');remain/=2;} while(remain<.5){atempo.push('atempo=0.5');remain/=.5;} if(Math.abs(remain-1)>0.001)atempo.push(`atempo=${remain.toFixed(5)}`);
+      const orig=`[0:a]volume=${origVol}`+(atempo.length?`,${atempo.join(',')}`:'')+'[orig]';
+      const music='[1:a]volume='+musicVol+'[music]';
+      args.push('-filter_complex',`[0:v]${vchain}[v];${orig};${music};[orig][music]amix=inputs=2:duration=first:dropout_transition=2[a]`,'-map','[v]','-map','[a]');
+    }else{
+      if(vf.length)args.push('-vf',vf.join(','));
+      args.push('-map','0:v:0','-map','0:a?');
+      const af=[]; if(origVol!==1)af.push(`volume=${origVol}`); if(speed!==1){let remain=speed;while(remain>2){af.push('atempo=2');remain/=2;}while(remain<.5){af.push('atempo=0.5');remain/=0.5;}if(Math.abs(remain-1)>0.001)af.push(`atempo=${remain.toFixed(5)}`);} if(af.length)args.push('-af',af.join(','));
+    }
+    args.push('-c:v','libx264','-preset','veryfast','-crf','23','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart','-shortest',output);
+    await runFFmpeg(args);
+    const buffer=await fs.promises.readFile(output);
+    return {...media,buffer,mime:'video/mp4',filename:(media.filename||'blizz-video').replace(/\.[^.]+$/,'')+'.mp4'};
+  } finally {await fs.promises.rm(tmp,{recursive:true,force:true}).catch(()=>{});}
+}
+
 async function main(){
   await initDb();
   await migrateLegacyFiles();
@@ -181,8 +224,9 @@ async function main(){
         let sound=null,soundType=null,soundName='';
         if(m.files.sound){sound=m.files.sound.buffer;soundType=m.files.sound.mime;soundName=String(m.fields.soundName||m.files.sound.filename||'Sound').slice(0,120)}
         let editConfig={};try{editConfig=JSON.parse(String(m.fields.editConfig||'{}'));}catch(_){editConfig={};}
+        const processed=await processUploadedVideo(media,sound,editConfig);
         const id='POST-'+crypto.randomUUID();
-        await q(`INSERT INTO posts(id,user_id,media,media_type,original_name,sound,sound_type,sound_name,caption,hashtags,mentions,visibility,edit_config) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,[id,u.id,media.buffer,media.mime,media.filename,sound,soundType,soundName,caption,JSON.stringify(hashtags),JSON.stringify(mentions),visibility,JSON.stringify(editConfig)]);
+        await q(`INSERT INTO posts(id,user_id,media,media_type,original_name,sound,sound_type,sound_name,caption,hashtags,mentions,visibility,edit_config) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,[id,u.id,processed.buffer,processed.mime,processed.filename,sound,soundType,soundName,caption,JSON.stringify(hashtags),JSON.stringify(mentions),visibility,JSON.stringify(editConfig)]);
         return json(res,201,{ok:true,post:{id,caption,hashtags,mentions,visibility,mediaUrl:'/api/media/'+id,soundUrl:sound?'/api/media/'+id+'/sound':null,soundName}});
       }
       if(req.url.startsWith('/api/media/')&&req.method==='GET'){
